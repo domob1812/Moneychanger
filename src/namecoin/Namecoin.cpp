@@ -361,7 +361,7 @@ NMC_NameManager::timerUpdate ()
               continue;
             }
 
-          /* If we can active (send the name_firstupdate), do it.  */
+          /* If we can activate (send the name_firstupdate), do it.  */
           if (i->canActivate ())
             {
               qDebug () << "Activating " << i->getName ().c_str ();
