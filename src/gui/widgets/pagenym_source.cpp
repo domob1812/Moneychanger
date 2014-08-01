@@ -39,17 +39,22 @@ void MTPageNym_Source::showEvent(QShowEvent * event)
 
         NMC_Interface nmc;
         std::string msg;
-        const bool ok = nmc.getNamecoin ().testConnection (msg);
-        ui->labelExtra->setText(msg.c_str ());
+        nmcrpc::CoinInterface& nc = nmc.getNamecoin ();
+        const bool ok = nc.testConnection (msg);
 
         if (ok)
         {
+            const nmcrpc::CoinInterface::Balance b = nc.getBalance ();
+            msg += " Your balance: " + b.toString () + " NMC.";
+
             ui->getAddress->setVisible(true);
             ui->getAddress->setText(tr("Get Address"));
 
             connect(ui->getAddress, SIGNAL(clicked()),
                     this, SLOT(getAddressClicked()));
         }
+
+        ui->labelExtra->setText(msg.c_str ());
     }
     else if (2 == nAuthorityIndex) // Legacy CA
     {
@@ -88,6 +93,15 @@ bool MTPageNym_Source::validatePage()
       if (!addr.isMine ())
         {
           ui->labelExtra->setText(tr("The provided Namecoin address is not in your wallet."));
+          return false;
+        }
+
+      /* Test the wallet balance.  We want at least 0.05 NMC to have some
+         safety margin over the minimal cost of 0.02 NMC.  */
+      const nmcrpc::CoinInterface::Balance b = nc.getBalance ();
+      if (20 * b.getIntValue () < nmcrpc::CoinInterface::Balance::COIN)
+        {
+          ui->labelExtra->setText(tr("Insufficient balance! You need at least 0.05 NMC in your wallet."));
           return false;
         }
     }
