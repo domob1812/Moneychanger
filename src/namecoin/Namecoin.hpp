@@ -29,7 +29,7 @@
 #include <string>
 
 #include <nmcrpc/JsonRpc.hpp>
-#include <nmcrpc/NamecoinInterface.hpp>
+#include <nmcrpc/NameInterface.hpp>
 #include <nmcrpc/NameRegistration.hpp>
 
 /** Namespace used for Namecoin credentials.  */
@@ -52,7 +52,7 @@ private:
   /** JSON-RPC interface used.  */
   nmcrpc::JsonRpc* rpc;
   /** High-level interface used.  */
-  nmcrpc::NamecoinInterface* nc;
+  nmcrpc::NameInterface* nc;
 
   // Disable copying.
 #ifndef CXX_11
@@ -92,7 +92,7 @@ public:
    * Get high-level Namecoin interface.
    * @return High-level Namecoin interface to be used.
    */
-  inline nmcrpc::NamecoinInterface&
+  inline nmcrpc::NameInterface&
   getNamecoin ()
   {
     return *nc;
@@ -116,7 +116,7 @@ private:
   /** JsonRpc connection to be used.  */
   nmcrpc::JsonRpc& rpc;
   /** High-level Namecoin interface to be used.  */
-  nmcrpc::NamecoinInterface& nc;
+  nmcrpc::NameInterface& nc;
 
   /** Type for array of NameRegistration objects.  */
   typedef std::list<nmcrpc::NameRegistration> regList;
@@ -132,8 +132,8 @@ private:
    * @param cred Credentials hash.
    * @return Namecoin name at which to register the credentials.
    */
-  nmcrpc::NamecoinInterface::Name getNameForNym (const QString& nym,
-                                                 const QString& cred);
+  nmcrpc::NameInterface::Name getNameForNym (const QString& nym,
+                                             const QString& cred);
 
   /* Functor class replacing the lambda expression to add names to
      list of pending registrations in C++03 mode.  */
@@ -213,7 +213,7 @@ public:
 /* NMC_WalletUnlocker.  */
 
 /**
- * Moneychanger specific wrapper around NamecoinInterface::WalletUnlocker that
+ * Moneychanger specific wrapper around CoinInterface::WalletUnlocker that
  * automatically shows a password dialog when needed.
  */
 class NMC_WalletUnlocker
@@ -222,10 +222,10 @@ class NMC_WalletUnlocker
 private:
 
   /** High-level Namecoin interface used.  */
-  nmcrpc::NamecoinInterface& nc;
+  nmcrpc::CoinInterface& nc;
   
   /** The "real" wallet unlocker object used behind-the-scenes.  */
-  nmcrpc::NamecoinInterface::WalletUnlocker unlocker;
+  nmcrpc::CoinInterface::WalletUnlocker unlocker;
 
 public:
 
@@ -237,7 +237,7 @@ public:
    * @param n The high-level interface to use.
    * @see unlock() to perform the unlock itself.
    */
-  explicit inline NMC_WalletUnlocker (nmcrpc::NamecoinInterface& n)
+  explicit inline NMC_WalletUnlocker (nmcrpc::CoinInterface& n)
     : nc(n), unlocker(n)
   {
     // Nothing more to do.
@@ -302,7 +302,7 @@ class NMC_Verifier
 private:
 
   /** Namecoin interface to use.  */
-  nmcrpc::NamecoinInterface& nc;
+  nmcrpc::NameInterface& nc;
 
   // Disable copying.
 #ifndef CXX_11
@@ -317,7 +317,7 @@ public:
    * Construct the verifier, given the Namecoin interface to use.
    * @param n The Namecoin interface to use.
    */
-  inline explicit NMC_Verifier (nmcrpc::NamecoinInterface& n)
+  inline explicit NMC_Verifier (nmcrpc::NameInterface& n)
     : nc(n)
   {
     // Nothing more to do.

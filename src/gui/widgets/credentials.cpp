@@ -268,7 +268,7 @@ MTCredentials::getNamecoinStatus (const std::string& nym,
   bool found = false;
 
   NMC_Interface nmc;
-  nmcrpc::NamecoinInterface& nc = nmc.getNamecoin ();
+  nmcrpc::NameInterface& nc = nmc.getNamecoin ();
 
   NameStatusFunctor nameHandler (nc, res, found, nym, cred);
 
@@ -326,7 +326,7 @@ MTCredentials::NameStatusFunctor::operator() (const QSqlRecord& rec)
     res = tr("pending");
   else
     {
-      nmcrpc::NamecoinInterface::Name nm;
+      nmcrpc::NameInterface::Name nm;
       nm = nc.queryName (name.toStdString ());
 
       std::string nymSrc;

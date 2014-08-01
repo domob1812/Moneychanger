@@ -70,7 +70,7 @@ bool MTPageNym_Source::validatePage()
       const std::string addrStr = ui->lineEditSource->text().toStdString();
 
       NMC_Interface nmc;
-      nmcrpc::NamecoinInterface& nc = nmc.getNamecoin();
+      nmcrpc::CoinInterface& nc = nmc.getNamecoin();
       const bool ok = nc.testConnection ();
 
       if (!ok)
@@ -79,7 +79,7 @@ bool MTPageNym_Source::validatePage()
           return false;
         }
 
-      const nmcrpc::NamecoinInterface::Address addr = nc.queryAddress(addrStr);
+      const nmcrpc::CoinInterface::Address addr = nc.queryAddress(addrStr);
       if (!addr.isValid ())
         {
           ui->labelExtra->setText(tr("Please enter a valid Namecoin address."));
@@ -103,7 +103,7 @@ MTPageNym_Source::~MTPageNym_Source()
 void MTPageNym_Source::getAddressClicked()
 {
   NMC_Interface nmc;
-  nmcrpc::NamecoinInterface::Address addr;
+  nmcrpc::CoinInterface::Address addr;
   addr = nmc.getNamecoin().createAddress();
 
   ui->lineEditSource->setText(addr.getAddress().c_str());

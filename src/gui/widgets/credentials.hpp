@@ -9,7 +9,7 @@
 #include <QString>
 #include <QStringList>
 
-#include <nmcrpc/NamecoinInterface.hpp>
+#include <nmcrpc/NameInterface.hpp>
 
 namespace Ui {
 class MTCredentials;
@@ -56,7 +56,7 @@ private:
 
     private:
 
-        nmcrpc::NamecoinInterface& nc;
+        nmcrpc::NameInterface& nc;
         QString& res;
         bool& found;
         const std::string& nym;
@@ -68,7 +68,7 @@ private:
     public:
 
         inline
-        NameStatusFunctor (nmcrpc::NamecoinInterface& n, QString& r, bool& f,
+        NameStatusFunctor (nmcrpc::NameInterface& n, QString& r, bool& f,
                            const std::string& ny, const std::string& cr)
           : nc(n), res(r), found(f), nym(ny), cred(cr)
         {}

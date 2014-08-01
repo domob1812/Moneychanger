@@ -2,7 +2,7 @@
     Namecoin.hpp
     Namecoin credential verification.
 
-    Copyright (c) 2013 by Daniel Kraft <d@domob.eu>
+    Copyright (c) 2013-2014 by Daniel Kraft <d@domob.eu>
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as published by
@@ -23,7 +23,8 @@
 #include "Namecoin.hpp"
 
 #include <nmcrpc/JsonRpc.hpp>
-#include <nmcrpc/NamecoinInterface.hpp>
+#include <nmcrpc/NameInterface.hpp>
+#include <nmcrpc/RpcSettings.hpp>
 
 #include <cstdlib>
 #include <iostream>
@@ -45,7 +46,7 @@ main (int argc, char** argv)
   RpcSettings settings;
   settings.readDefaultConfig ();
   JsonRpc rpc(settings);
-  NamecoinInterface nc(rpc);
+  NameInterface nc(rpc);
   
   NMC_Verifier verify(nc);
   const bool res = verify.verifyCredentialHashAtSource (hash, source);

@@ -18,12 +18,14 @@
  *  to those of the GNU Affero General Public License.
  */
 
-#ifndef NMCRPC_NAMECOININTERFACE_HPP
-#define NMCRPC_NAMECOININTERFACE_HPP
+#ifndef NMCRPC_COININTERFACE_HPP
+#define NMCRPC_COININTERFACE_HPP
 
 #include "JsonRpc.hpp"
 
 #include <cassert>
+#include <cmath>
+#include <stdint.h>
 #include <stdexcept>
 #include <string>
 
@@ -31,30 +33,34 @@ namespace nmcrpc
 {
 
 /* ************************************************************************** */
-/* High-level interface to Namecoin.  */
+/* High-level interface to the core wallet.  */
 
 /**
- * Allow high-level interfacing to Namecoin via an underlying RPC connection.
+ * Allow high-level interfacing to a coin daemon via an underlying RPC
+ * connection.  This is the part that is independent of names, just balances
+ * and addresses.  It can be used for Bitcoin or other coins as well as
+ * Namecoin.
  */
-class NamecoinInterface
+class CoinInterface
 {
 
 public:
 
   /* Exceptions.  */
-  class NameNotFound;
   class NoPrivateKey;
   class UnlockFailure;
 
   /* Other child classes.  */
   class Address;
-  class Name;
+  class Balance;
   class WalletUnlocker;
 
-private:
+protected:
 
   /** Underlying RPC connection.  */
   JsonRpc& rpc;
+
+private:
 
   /**
    * The number of seconds we want to temporarily unlock the wallet in case
@@ -64,9 +70,9 @@ private:
 
   // Disable copying and default constructor.
 #ifndef CXX_11
-  NamecoinInterface ();
-  NamecoinInterface (const NamecoinInterface&);
-  NamecoinInterface& operator= (const NamecoinInterface&);
+  CoinInterface ();
+  CoinInterface (const CoinInterface&);
+  CoinInterface& operator= (const CoinInterface&);
 #endif /* !CXX_11  */
 
 public:
@@ -75,7 +81,7 @@ public:
    * Construct it with the given RPC connection.
    * @param r The RPC connection.
    */
-  explicit inline NamecoinInterface (JsonRpc& r)
+  explicit inline CoinInterface (JsonRpc& r)
     : rpc(r)
   {
     // Nothing more to be done.
@@ -83,9 +89,9 @@ public:
 
   // We want no default constructor or copying.
 #ifdef CXX_11
-  NamecoinInterface () = delete;
-  NamecoinInterface (const NamecoinInterface&) = delete;
-  NamecoinInterface& operator= (const NamecoinInterface&) = delete;
+  CoinInterface () = delete;
+  CoinInterface (const CoinInterface&) = delete;
+  CoinInterface& operator= (const CoinInterface&) = delete;
 #endif /* CXX_11?  */
 
   /**
@@ -124,25 +130,6 @@ public:
   Address createAddress ();
 
   /**
-   * Query for a name by string.  If the name is registered, this immediately
-   * queries for the name's associated data.  If the name does not yet exist,
-   * this still succeeds and returns a Name object that can be used to find
-   * out that fact as well as register the name.
-   * @param name The name to check.
-   * @return The created name object.
-   */
-  Name queryName (const std::string& name);
-
-  /**
-   * Query for a name by namespace and name.
-   * @see queryName (const std::string&)
-   * @param ns The namespace.
-   * @param name The (namespace-less) name.
-   * @return The created name object.
-   */
-  Name queryName (const std::string& ns, const std::string& name);
-
-  /**
    * Query for the number of confirmations a transaction has.
    * @param txid The transaction id to check for.
    * @return Number of confirmations the transaction has.
@@ -151,21 +138,10 @@ public:
   unsigned getNumberOfConfirmations (const std::string& txid);
 
   /**
-   * Query for all user-owned names in the wallet (according to name_list but
-   * filtering out names that have been sent away) and execute some call-back
-   * on them.
-   * @param cb Call-back routine.
+   * Get the current wallet balance.
+   * @return Current wallet balance.
    */
-  template<typename T>
-    void forMyNames (T cb);
-
-  /**
-   * Query for all names in the index (according to name_scan) and execute
-   * some call-back on them.
-   * @param cb Call-back routine.
-   */
-  template<typename T>
-    void forAllNames (T cb);
+  Balance getBalance ();
 
   /**
    * Check whether the wallet needs to be unlocked or not.  This routine is
@@ -183,12 +159,12 @@ public:
 /**
  * Encapsulate a Namecoin address.
  */
-class NamecoinInterface::Address
+class CoinInterface::Address
 {
 
 private:
 
-  friend class NamecoinInterface;
+  friend class CoinInterface;
 
   /** The namecoin interface to be used for RPC calls (message signing).  */
   JsonRpc* rpc;
@@ -203,8 +179,8 @@ private:
 
   /**
    * Construct the address.  This is meant to be used only
-   * from inside NamecoinInterface.  Outside users should use
-   * NamecoinInterface::queryAddress or other methods to obtain
+   * from inside CoinInterface.  Outside users should use
+   * CoinInterface::queryAddress or other methods to obtain
    * address objects.
    * @param r The namecoin interface to use.
    * @param a The address as string.
@@ -281,186 +257,146 @@ public:
 };
 
 /* ************************************************************************** */
-/* Name object.  */
+/* Balance object.  */
 
 /**
- * Encapsulate a Namecoin name.
+ * Hold a currency balance / amount.  This is stored internally
+ * (like Bitcoin Core does) as a fixed-point decimal, as multiples
+ * of Satoshis.  This number can be converted to/from JSON and
+ * to/from floating-point numbers for ease-of-use.
  */
-class NamecoinInterface::Name
+class CoinInterface::Balance
 {
+
+public:
+
+  /** Type used for the internal Satoshi numbers.  */
+  typedef int64_t IntType;
+  /** Type used to approximate balances with real numbers.  */
+  typedef double RealType;
+
+  /** Number of Satoshis in a full coin.  */
+  static const IntType COIN;
 
 private:
 
-  friend class NamecoinInterface;
-
-  /**
-   * Whether or not this is a default-constructed object.  Those can't be
-   * used for anything.
-   */
-  bool initialised;
-
-  /** The name's string.  */
-  std::string name;
-
-  /** Whether or not the name is already registered.  */
-  bool ex;
-
-  /** The address holding the name.  */
-  Address addr;
-
-  /** The name's JSON data, which name_show returns.  */
-  JsonRpc::JsonData data;
-
-  /**
-   * Construct the name.  This is meant to be used only
-   * from inside NamecoinInterface.  Outside users should use
-   * NamecoinInterface::queryName or other methods to obtain
-   * name objects.
-   * @param n The name's string.
-   * @param nc NamecoinInterface object.
-   * @param rpc The RPC object to use for finding info about the name.
-   */
-  Name (const std::string& n, NamecoinInterface& nc, JsonRpc& rpc);
-
-  /**
-   * Ensure that this object is initialised and not default-constructed.
-   * @throws std::runtime_error if it is default-constructed.
-   */
-  inline void
-  ensureInitialised () const
-  {
-    if (!initialised)
-      throw std::runtime_error ("Name is not yet initialised.");
-  }
-
-  /**
-   * Ensure that this object has status "exists".
-   * @throws NameNotFound if the name doesn't yet exist.
-   */
-  void ensureExists () const;
+  /** Store value internally.  */
+  IntType value;
 
 public:
 
   /**
-   * Default constructor, marks object as "invalid".  This is here for
-   * convenience so that variables of type Name can be declared, but they
-   * can't be used for anything until they have been assigned to.
+   * Default constructor.  Sets value to zero.
    */
-  inline Name ()
-    : initialised(false)
+  inline Balance ()
+    : value(0)
+  {}
+
+  /**
+   * Construct from integer value of Satoshis.
+   * @param v Value in Satoshis.
+   */
+  inline Balance (IntType v)
+    : value(v)
+  {}
+
+  /**
+   * Construct from double value.
+   * @param v Value in NMC as double.
+   */
+  inline Balance (RealType v)
   {
-    // Nothing more to do.
+    operator= (v);
+  }
+
+  /**
+   * Construct from JSON value.
+   * @param v Value as JSON object.
+   */
+  inline Balance (const JsonRpc::JsonData& v)
+  {
+    operator= (v);
   }
 
   // Copying is ok.
 #ifdef CXX_11
-  Name (const Name&) = default;
-  Name& operator= (const Name&) = default;
+  Balance (const Balance&) = default;
+  Balance& operator= (const Balance&) = default;
 #endif /* CXX_11?  */
 
   /**
-   * Get the name as string.
-   * @return The name as string.
+   * Set to given number of Satoshis.
+   * @param v Value in Satoshis.
+   * @return Reference to "this".
    */
-  inline const std::string&
-  getName () const
+  inline Balance&
+  operator= (IntType v)
   {
-    ensureInitialised ();
-    return name;
+    value = v;
+    return *this;
   }
 
   /**
-   * Get the address holding the name.
-   * @return The name's address.
-   * @throws NameNotFound if the name doesn't yet exist.
+   * Set from a double value.
+   * @param v Value in NMC as floating-point.
+   * @return Reference to "this".
    */
-  inline const Address&
-  getAddress () const
+  inline Balance&
+  operator= (RealType v)
   {
-    ensureExists ();
-    return addr;
+    return operator= (static_cast<IntType> (round (v * COIN)));
   }
 
   /**
-   * Get whether or not the name exists.
-   * @return True iff this name already exists.
+   * Set from a JSON value.  This is internally handled like the
+   * "set to double" variant.  It may be changed in the future
+   * if JSON handles arbitrary precision floating-point literals.
+   * @param v JSON value from which to extract the value.
+   * @return Reference to "this".
    */
-  inline bool
-  exists () const
+  inline Balance&
+  operator= (const JsonRpc::JsonData& v)
   {
-    ensureInitialised ();
-    return ex;
+    return operator= (static_cast<RealType> (v.asDouble ()));
   }
 
   /**
-   * Get the name's full JSON info as per name_show.
-   * @return This name's full JSON info.
-   * @throws NameNotFound if the name doesn't yet exist.
+   * Get value in Satoshis.
+   * @return Value in Satoshis.
    */
-  inline const JsonRpc::JsonData&
-  getFullData () const
+  inline IntType
+  getIntValue () const
   {
-    ensureExists ();
-    return data;
+    return value;
   }
 
   /**
-   * Get the name's value as string.
-   * @return This name's value as string.
-   * @throws NameNotFound if the name doesn't yet exist.
+   * Get value as real number (floating point).
+   * @return Value in NMC as double.
    */
-  inline const std::string
-  getStringValue () const
+  inline RealType
+  getRealValue () const
   {
-    ensureExists ();
-    return data["value"].asString ();
+    return static_cast<RealType> (value) / COIN;
   }
 
   /**
-   * Get the name's value as JSON object.
-   * @return This name's value as JSON object.
-   * @throws NameNotFound if the name doesn't yet exist.
-   * @throws JsonRpc::JsonParseError if JSON parsing fails.
+   * Get value as JSON data.
+   * @return Value as JSON object.
    */
   inline JsonRpc::JsonData
   getJsonValue () const
   {
-    return JsonRpc::decodeJson (getStringValue ());
+    return JsonRpc::JsonData(static_cast<double> (getRealValue ()));
   }
 
-  /**
-   * Return whether the name is expired.
-   * @return True iff this name exists but is expired.
-   * @throws NameNotFound if the name doesn't yet exist.
-   */
-  inline bool
-  isExpired () const
-  {
-    ensureExists ();
-    return (data["expired"].isInt () && (data["expired"].asInt () != 0));
-  }
+  /* TODO: Arithmetic operations (plus, minus, times scalar).  */
 
   /**
-   * Return number of blocks until the name expires.
-   * @return The number of blocks until the name expires.  Might be negative.
-   * @throws NameNotFound if the name doesn't yet exist.
+   * Convert the balance to a formatted string.
+   * @return Value as string.
    */
-  inline int
-  getExpireCounter () const
-  {
-    ensureExists ();
-    return data["expires_in"].asInt ();
-  }
-
-  /**
-   * Utility routine to split a name into namespace and trimmed parts.
-   * @param name The full name.
-   * @param ns Set to namespace part.
-   * @param trimmed Set to trimmed part.
-   * @return True if splitting was successful, false if there's no namespace.
-   */
-  static bool split (const std::string& name,
-                     std::string& ns, std::string& trimmed);
+  std::string toString () const;
 
 };
 
@@ -472,17 +408,17 @@ public:
  * ensures that the wallet is locked (if it was indeed unlocked) again
  * at the latest when we go out of scope.
  */
-class NamecoinInterface::WalletUnlocker
+class CoinInterface::WalletUnlocker
 {
 
 private:
 
-  friend class NamecoinInterface;
+  friend class CoinInterface;
 
   /** The RPC object to use.  */
   JsonRpc& rpc;
   /** High-level interface to use.  */
-  NamecoinInterface& nc;
+  CoinInterface& nc;
 
   /** Whether we actually unlocked the wallet.  */
   bool unlocked;
@@ -498,9 +434,9 @@ public:
 
   /**
    * Construct it, not yet unlocking.
-   * @param n The NamecoinInterface to use.
+   * @param n The CoinInterface to use.
    */
-  explicit WalletUnlocker (NamecoinInterface& n);
+  explicit WalletUnlocker (CoinInterface& n);
 
   // No default constructor or copying.
 #ifdef CXX_11
@@ -528,63 +464,10 @@ public:
 /* Exception classes.  */
 
 /**
- * Thrown when a name that is not yet registered is asked for.
- */
-class NamecoinInterface::NameNotFound : public std::runtime_error
-{
-
-private:
-
-  /** The name that was not found.  */
-  std::string name;
-
-  // Disable default constructor.
-#ifndef CXX_11
-  NameNotFound ();
-#endif /* !CXX_11  */
-
-public:
-
-  /**
-   * Construct it given the name that is not found.
-   * @param n The undefined name.
-   */
-  explicit inline NameNotFound (const std::string& n)
-    : std::runtime_error("Name not found: " + n), name(n)
-  {
-    // Nothing else to do.
-  }
-
-  /* No default constructor, but copying ok.  */
-#ifdef CXX_11
-  NameNotFound () = delete;
-  NameNotFound (const NameNotFound&) = default;
-  NameNotFound& operator= (const NameNotFound&) = default;
-#endif /* CXX_11?  */
-
-  // Specify throw() explicitly.
-#ifndef CXX_11
-  inline ~NameNotFound () throw ()
-  {}
-#endif /* !CXX_11  */
-
-  /**
-   * Get the name of this error.
-   * @return The name that was not found.
-   */
-  inline const std::string&
-  getName () const
-  {
-    return name;
-  }
-
-};
-
-/**
  * Thrown when an action is to be performed for which the private key
  * is missing from the wallet.
  */
-class NamecoinInterface::NoPrivateKey : public std::runtime_error
+class CoinInterface::NoPrivateKey : public std::runtime_error
 {
 
 private:
@@ -619,7 +502,7 @@ public:
  * Thrown in case of failure to unlock the wallet (because of a wrong
  * passphrase, presumably).
  */
-class NamecoinInterface::UnlockFailure : public std::runtime_error
+class CoinInterface::UnlockFailure : public std::runtime_error
 {
 
 private:
@@ -649,11 +532,6 @@ public:
 #endif /* CXX_11?  */
 
 };
-
-/* ************************************************************************** */
-
-/* Include template implementations.  */
-#include "NamecoinInterface.tpp"
 
 } // namespace nmcrpc
 

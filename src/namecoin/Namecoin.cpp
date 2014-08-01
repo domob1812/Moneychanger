@@ -52,7 +52,7 @@ NMC_Interface::NMC_Interface ()
   settings.readDefaultConfig ();
 
   rpc = new nmcrpc::JsonRpc (settings);
-  nc = new nmcrpc::NamecoinInterface (*rpc);
+  nc = new nmcrpc::NameInterface (*rpc);
 }
 
 /**
@@ -126,7 +126,7 @@ NMC_NameManager::~NMC_NameManager ()
  * @param cred Credentials hash.
  * @return Namecoin name at which to register the credentials.
  */
-nmcrpc::NamecoinInterface::Name
+nmcrpc::NameInterface::Name
 NMC_NameManager::getNameForNym (const QString& nym, const QString& cred)
 {
   return nc.queryName (NMC_NS, cred.toStdString ());
@@ -146,7 +146,7 @@ NMC_NameManager::startRegistration (const QString& nym, const QString& cred)
 
   try
     {
-      const nmcrpc::NamecoinInterface::Name nm = getNameForNym (nym, cred);
+      const nmcrpc::NameInterface::Name nm = getNameForNym (nym, cred);
 
       NMC_WalletUnlocker unlocker (nc);
       try
@@ -210,7 +210,7 @@ bool
 NMC_NameManager::updateName (const QString& nym, const QString& cred)
 {
   std::string addrStr = OTAPI_Wrap::It()->GetNym_SourceForID (nym.toStdString ());
-  const nmcrpc::NamecoinInterface::Address addr = nc.queryAddress (addrStr);
+  const nmcrpc::CoinInterface::Address addr = nc.queryAddress (addrStr);
 
   if (!addr.isValid () || !addr.isMine ())
     {
@@ -220,7 +220,7 @@ NMC_NameManager::updateName (const QString& nym, const QString& cred)
       return false;
     }
 
-  const nmcrpc::NamecoinInterface::Name nm = getNameForNym (nym, cred);
+  const nmcrpc::NameInterface::Name nm = getNameForNym (nym, cred);
   nmcrpc::NameUpdate upd(rpc, nc, nm);
 
   /* The wallet needs to be already unlocked from the caller.  Otherwise,
@@ -256,7 +256,7 @@ NMC_NameManager::updateName (const QString& nym, const QString& cred)
       DBHandler::getInstance ()->runQuery (qu.release ());
       qu.release ();
     }
-  catch (const nmcrpc::NamecoinInterface::NoPrivateKey& exc)
+  catch (const nmcrpc::CoinInterface::NoPrivateKey& exc)
     {
       qDebug () << "Name cannot be updated, as you don't own the private key.";
       return false;
@@ -458,7 +458,7 @@ NMC_WalletUnlocker::unlock ()
       unlocker.unlock (pwd);
       qDebug () << "Unlock successful (or not necessary).";
     }
-  catch (const nmcrpc::NamecoinInterface::UnlockFailure& exc)
+  catch (const nmcrpc::CoinInterface::UnlockFailure& exc)
     {
       qDebug () << "Wrong passphrase, retrying.";
       unlock ();
@@ -494,7 +494,7 @@ NMC_Verifier::verifyCredentialHashAtSource (const std::string& hash,
               << std::endl << "  " << hash << std::endl << "  " << source
               << std::endl;
 
-  const nmcrpc::NamecoinInterface::Name nm = nc.queryName (NMC_NS, hash);
+  const nmcrpc::NameInterface::Name nm = nc.queryName (NMC_NS, hash);
 
   try
     {
@@ -510,7 +510,7 @@ NMC_Verifier::verifyCredentialHashAtSource (const std::string& hash,
         }
       const std::string sig = sigval.asString ();
 
-      const nmcrpc::NamecoinInterface::Address addr = nm.getAddress ();
+      const nmcrpc::CoinInterface::Address addr = nm.getAddress ();
       if (source != addr.getAddress ())
         {
           if (verbose)
@@ -520,7 +520,7 @@ NMC_Verifier::verifyCredentialHashAtSource (const std::string& hash,
 
       return addr.verifySignature (hash, sig);
     }
-  catch (const nmcrpc::NamecoinInterface::NameNotFound& exc)
+  catch (const nmcrpc::NameInterface::NameNotFound& exc)
     {
       if (verbose)
         std::cout << "The name does not exist." << std::endl;

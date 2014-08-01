@@ -18,20 +18,21 @@
  *  to those of the GNU Affero General Public License.
  */
 
-/* Source code for NamecoinInterface.hpp.  */
+/* Source code for CoinInterface.hpp.  */
 
-#include "NamecoinInterface.hpp"
+#include "CoinInterface.hpp"
 
 #include <ctime>
+#include <iomanip>
 #include <sstream>
 
 namespace nmcrpc
 {
 
 /* ************************************************************************** */
-/* High-level interface to Namecoin.  */
+/* High-level interface to the core wallet.  */
 
-const unsigned NamecoinInterface::UNLOCK_SECONDS = 3600;
+const unsigned CoinInterface::UNLOCK_SECONDS = 3600;
 
 /**
  * Run a simple test command and return whether the connection seems to
@@ -41,7 +42,7 @@ const unsigned NamecoinInterface::UNLOCK_SECONDS = 3600;
  * @return True iff the connection seems to be fine.
  */
 bool
-NamecoinInterface::testConnection (std::string& msg)
+CoinInterface::testConnection (std::string& msg)
 {
   try
     {
@@ -54,7 +55,7 @@ NamecoinInterface::testConnection (std::string& msg)
       version /= 100;
 
       std::ostringstream msgOut;
-      msgOut << "Success!  Namecoind version "
+      msgOut << "Success!  Daemon version "
              << "0." << version << "." << v2;
       if (v3 > 0)
         msgOut << "." << v3;
@@ -85,8 +86,8 @@ NamecoinInterface::testConnection (std::string& msg)
  * @param addr The address to check.
  * @return The created address object.
  */
-NamecoinInterface::Address
-NamecoinInterface::queryAddress (const std::string& addr)
+CoinInterface::Address
+CoinInterface::queryAddress (const std::string& addr)
 {
   return Address (rpc, addr);
 }
@@ -95,40 +96,11 @@ NamecoinInterface::queryAddress (const std::string& addr)
  * Create a new address (as per "getnewaddress") and return it.
  * @return Newly created address.
  */
-NamecoinInterface::Address
-NamecoinInterface::createAddress ()
+CoinInterface::Address
+CoinInterface::createAddress ()
 {
   const JsonRpc::JsonData addr = rpc.executeRpc ("getnewaddress");
   return Address (rpc, addr.asString ());
-}
-
-/**
- * Query for a name by string.  If the name is registered, this immediately
- * queries for the name's associated data.  If the name does not yet exist,
- * this still succeeds and returns a Name object that can be used to find
- * out that fact as well as register the name.
- * @param name The name to check.
- * @return The created name object.
- */
-NamecoinInterface::Name
-NamecoinInterface::queryName (const std::string& name)
-{
-  return Name (name, *this, rpc);
-}
-
-/**
- * Query for a name by namespace and name.
- * @see queryName (const std::string&)
- * @param ns The namespace.
- * @param name The (namespace-less) name.
- * @return The created name object.
- */
-NamecoinInterface::Name
-NamecoinInterface::queryName (const std::string& ns, const std::string& name)
-{
-  std::ostringstream full;
-  full << ns << "/" << name;
-  return queryName (full.str ());
 }
 
 /**
@@ -138,12 +110,23 @@ NamecoinInterface::queryName (const std::string& ns, const std::string& name)
  * @throws JsonRpc::RpcError if the tx is not found.
  */
 unsigned
-NamecoinInterface::getNumberOfConfirmations (const std::string& txid)
+CoinInterface::getNumberOfConfirmations (const std::string& txid)
 {
   const JsonRpc::JsonData res = rpc.executeRpc ("gettransaction", txid);
   assert (res.isObject ());
 
   return res["confirmations"].asInt ();
+}
+
+/**
+ * Get the current wallet balance.
+ * @return Current wallet balance.
+ */
+CoinInterface::Balance
+CoinInterface::getBalance ()
+{
+  const JsonRpc::JsonData res = rpc.executeRpc ("getbalance");
+  return Balance(res);
 }
 
 /**
@@ -153,7 +136,7 @@ NamecoinInterface::getNumberOfConfirmations (const std::string& txid)
  * @return True iff we need a passphrase.
  */
 bool
-NamecoinInterface::needWalletPassphrase ()
+CoinInterface::needWalletPassphrase ()
 {
   const JsonRpc::JsonData res = rpc.executeRpc ("getinfo");
 
@@ -169,13 +152,13 @@ NamecoinInterface::needWalletPassphrase ()
 
 /**
  * Construct the address.  This is meant to be used only
- * from inside NamecoinInterface.  Outside users should use
- * NamecoinInterface::queryAddress or other methods to obtain
+ * from inside CoinInterface.  Outside users should use
+ * CoinInterface::queryAddress or other methods to obtain
  * address objects.
  * @param r The namecoin interface to use.
  * @param a The address as string.
  */
-NamecoinInterface::Address::Address (JsonRpc& r, const std::string& a)
+CoinInterface::Address::Address (JsonRpc& r, const std::string& a)
   : rpc(&r), addr(a)
 {
   const JsonRpc::JsonData res = rpc->executeRpc ("validateaddress", addr);
@@ -193,8 +176,8 @@ NamecoinInterface::Address::Address (JsonRpc& r, const std::string& a)
  * @return True iff the signature matches the message.
  */
 bool
-NamecoinInterface::Address::verifySignature (const std::string& msg,
-                                             const std::string& sig) const
+CoinInterface::Address::verifySignature (const std::string& msg,
+                                         const std::string& sig) const
 {
   if (!valid)
     return false;
@@ -222,7 +205,7 @@ NamecoinInterface::Address::verifySignature (const std::string& msg,
  * @throws std::runtime_error if the address is invalid or the wallet locked.
  */
 std::string
-NamecoinInterface::Address::signMessage (const std::string& msg) const
+CoinInterface::Address::signMessage (const std::string& msg) const
 {
   if (!valid)
     throw std::runtime_error ("Can't sign with invalid address.");
@@ -254,68 +237,42 @@ NamecoinInterface::Address::signMessage (const std::string& msg) const
 }
 
 /* ************************************************************************** */
-/* Name object.  */
+/* Balance object.  */
+
+/** Number of Satoshis in a full coin.  */
+const CoinInterface::Balance::IntType CoinInterface::Balance::COIN = 100000000;
 
 /**
- * Construct the name.  This is meant to be used only
- * from inside NamecoinInterface.  Outside users should use
- * NamecoinInterface::queryName or other methods to obtain
- * name objects.
- * @param n The name's string.
- * @param nc NamecoinInterface object.
- * @param rpc The RPC object to use for finding info about the name.
+ * Convert the balance to a formatted string.
+ * @return Value as string.
  */
-NamecoinInterface::Name::Name (const std::string& n, NamecoinInterface& nc,
-                               JsonRpc& rpc)
-  : initialised(true), name(n)
+std::string
+CoinInterface::Balance::toString () const
 {
-  try
+  IntType abs;
+  bool negative;
+  if (value < 0)
     {
-      data = rpc.executeRpc ("name_show", n);
-      ex = true;
-      addr = nc.queryAddress (data["address"].asString ());
+      negative = true;
+      abs = -value;
     }
-  catch (const JsonRpc::RpcError& exc)
+  else
     {
-      if (exc.getErrorCode () == -4)
-        {
-          ex = false;
-          return;
-        }
-      throw exc;
+      negative = false;
+      abs = value;
     }
-}
+  assert (abs >= 0);
 
-/**
- * Ensure that this object has status "exists".
- * @throws NameNotFound if the name doesn't yet exist.
- */
-void
-NamecoinInterface::Name::ensureExists () const
-{
-  if (!ex)
-    throw NameNotFound (name);
-}
+  const IntType full = abs / COIN;
+  const IntType frac = abs % COIN;
+  assert (abs == full * COIN + frac && frac >= 0 && frac < COIN);
 
-/**
- * Utility routine to split a name into namespace and trimmed parts.
- * @param name The full name.
- * @param ns Set to namespace part.
- * @param trimmed Set to trimmed part.
- * @return True if splitting was successful, false if there's no namespace.
- */
-bool
-NamecoinInterface::Name::split (const std::string& name,
-                                std::string& ns, std::string& trimmed)
-{
-  const std::string::size_type pos = name.find ('/');
-  if (pos == std::string::npos)
-    return false;
+  std::ostringstream res;
+  if (negative)
+    res << "-";
+  res << full << "." << std::setw(8) << std::setfill('0') << frac;
 
-  ns = name.substr (0, pos);
-  trimmed = name.substr (pos + 1);
-
-  return true;
+  return res.str ();
 }
 
 /* ************************************************************************** */
@@ -323,9 +280,9 @@ NamecoinInterface::Name::split (const std::string& name,
 
 /**
  * Construct it, not yet unlocking.
- * @param n The NamecoinInterface to use.
+ * @param n The CoinInterface to use.
  */
-NamecoinInterface::WalletUnlocker::WalletUnlocker (NamecoinInterface& n)
+CoinInterface::WalletUnlocker::WalletUnlocker (CoinInterface& n)
   : rpc(n.rpc), nc(n), unlocked(false)
 {
   // Nothing else to do.
@@ -334,7 +291,7 @@ NamecoinInterface::WalletUnlocker::WalletUnlocker (NamecoinInterface& n)
 /**
  * Lock the wallet on destruct.
  */
-NamecoinInterface::WalletUnlocker::~WalletUnlocker ()
+CoinInterface::WalletUnlocker::~WalletUnlocker ()
 {
   if (unlocked)
     rpc.executeRpc ("walletlock");
@@ -347,7 +304,7 @@ NamecoinInterface::WalletUnlocker::~WalletUnlocker ()
  * @throws UnlockFailure if the passphrase is wrong.
  */
 void
-NamecoinInterface::WalletUnlocker::unlock (const std::string& passphrase)
+CoinInterface::WalletUnlocker::unlock (const std::string& passphrase)
 {
   if (unlocked)
     throw std::runtime_error ("Wallet is already unlocked!");
@@ -368,6 +325,7 @@ NamecoinInterface::WalletUnlocker::unlock (const std::string& passphrase)
 
       try
         {
+          rpc.disableLoggingOneShot ();
           rpc.executeRpc ("walletpassphrase", passphrase, UNLOCK_SECONDS);
           unlocked = true;
         }
